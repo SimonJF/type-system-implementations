@@ -1,0 +1,6 @@
+(executable
+ (public_name stlc_noann)
+ (name main)
+ (flags (:standard -w -7-17-32-33-27-26-34-37-39))
+ (libraries unionFind stlc_noann))
+

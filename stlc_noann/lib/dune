@@ -1,0 +1,2 @@
+(library
+ (name stlc_noann))
