@@ -1,58 +1,26 @@
-module TyVar = struct
-    type t = string
-    
-    let fresh ?(prefix="_") =
-        let source = ref 0 in
-        fun () ->
-            let sym = !source in
-            let () = incr source in
-            prefix ^ (string_of_int sym)
-
-    let pp = Format.pp_print_string
-end
-module Type = struct
-    type t =
-        | TVar of TyVar.t
-        | TNat
-        | TBool
-        | TFun of (t * t)
-
-
-    let rec pp ppf =
-        function
-            | TVar tv -> TyVar.pp ppf tv
-            | TNat -> Format.pp_print_string ppf "Nat"
-            | TBool -> Format.pp_print_string ppf "Bool"
-            | TFun (t1, t2) -> Format.fprintf ppf "%a -> %a" pp t1 pp t2
-end
-
-module Expr = struct
-    type binder = string
-    type variable = string
-
-    type t =
-        | EVar of variable
-        | EFun of (binder * t)
-        | EApp of (t * t)
-        | EBool of bool
-        | EIf of (t * t * t)
-        | EZero
-        | EPred of t
-        | ESucc of t
-        | EIsZero of t
-end
+open Ast
+open Errors
 
 module Constraint = struct
     type t = Type.t * Type.t
 
     let make t1 t2 = (t1, t2)
     let compare = Stdlib.compare
+    let pp ppf (t1, t2) =
+        Format.fprintf ppf "%a = %a" Type.pp t1 Type.pp t2
 end
 
 module ConstraintSet = struct
     include Set.Make(Constraint)
     let union_many = List.fold_left (union) empty
     let make_singleton t1 t2 = singleton (Constraint.make t1 t2)
+
+    let pp ppf set =
+        let pp_semi ppf () = Format.pp_print_string ppf "; " in
+        let xs = elements set in
+        Format.pp_print_list
+            ~pp_sep:pp_semi
+            Constraint.pp ppf xs
 end
 
 module Typecheck = struct
@@ -64,6 +32,50 @@ module Typecheck = struct
     let rec tc env =
         let open Expr in
         let open Type in
+        let tc_const = function
+            | Constant.CString _ -> TString
+            | Constant.CBool _ -> TBool
+            | Constant.CInt _ -> TInt
+            | Constant.CUnit -> TUnit
+        in
+        let tc_binop op e1 e2 =
+            let open BinOp in
+            let (ty1, constrs1) = tc env e1 in
+            let (ty2, constrs2) = tc env e2 in
+            match op with
+                | And | Or ->
+                    let constrs =
+                        ConstraintSet.of_list [
+                           Constraint.make ty1 Type.TBool;
+                           Constraint.make ty2 Type.TBool;
+                        ]
+                    in
+                    (TBool, ConstraintSet.union_many [constrs1; constrs2; constrs])
+                (* Polymorphic equality *)
+                | Eq | NEq ->
+                    let constrs =
+                        ConstraintSet.make_singleton ty1 ty2
+                    in
+                    (TBool, ConstraintSet.union_many [constrs1; constrs2; constrs])
+                (* Relational numeric operators *)
+                | LT | GT | LEq | GEq ->
+                    let constrs =
+                        ConstraintSet.of_list [
+                           Constraint.make ty1 Type.TInt;
+                           Constraint.make ty2 Type.TInt;
+                        ]
+                    in
+                    (TBool, ConstraintSet.union_many [constrs1; constrs2; constrs])
+                (* Numeric operators *)
+                | Add | Mul | Sub | Div ->
+                    let constrs =
+                        ConstraintSet.of_list [
+                           Constraint.make ty1 Type.TInt;
+                           Constraint.make ty2 Type.TInt;
+                        ]
+                    in
+                    (TInt, ConstraintSet.union_many [constrs1; constrs2; constrs])
+        in
         function
             | EVar v -> StringMap.find v env, ConstraintSet.empty
             | EFun (bnd, body) ->
@@ -78,8 +90,14 @@ module Typecheck = struct
                 let funty_constr =
                     ConstraintSet.make_singleton ty1 (TFun (ty2, ftv))
                 in
-                (ftv, ConstraintSet.union_many [constrs1; constrs2; funty_constr])
-            | EBool _ -> TBool, ConstraintSet.empty
+                ftv, ConstraintSet.union_many [constrs1; constrs2; funty_constr]
+            | EBinOp (op, e1, e2) -> tc_binop op e1 e2
+            | EConst c -> tc_const c, ConstraintSet.empty
+            | ELet (bnd, e1, e2) ->
+                let (ty1, constrs1) = tc env e1 in
+                let env' = StringMap.add bnd ty1 env in
+                let (ty2, constrs2) = tc env' e2 in
+                ty2, ConstraintSet.union constrs1 constrs2
             | EIf (e1, e2, e3) ->
                 let (ty1, constrs1) = tc env e1 in
                 let (ty2, constrs2) = tc env e2 in
@@ -92,17 +110,9 @@ module Typecheck = struct
                 let constrs =
                     ConstraintSet.union_many [constrs1; constrs2; constrs3; new_constrs]
                 in
-                (ty2, constrs)
-            | EZero -> (TNat, ConstraintSet.empty)
-            | EPred e
-            | ESucc e ->
-                let (ty, constrs) = tc env e in
-                (ty, ConstraintSet.union constrs (ConstraintSet.make_singleton ty TNat))
-            | EIsZero e ->
-                let (ty, constrs) = tc env e in
-                (TBool, ConstraintSet.union constrs (ConstraintSet.make_singleton ty TNat))
+                ty2, constrs
 
-
+    let typecheck = tc StringMap.empty
 end
 
 module Solution = struct
@@ -117,38 +127,127 @@ module Solution = struct
                     | Some ty -> ty
                     | None -> TVar tv
               end
-        | TNat -> TNat
-        | TBool -> TBool
         | TFun (t1, t2) -> TFun (apply sol t1, apply sol t2)
+        | t -> t
+
+    let pp ppf sol =
+        let pp_semi ppf () = Format.pp_print_string ppf "; " in
+        let pp_entry ppf (tv, ty) =
+            Format.fprintf ppf "%a |-> %a" TyVar.pp tv Type.pp ty
+        in
+        let sol_list = as_list sol in
+        Format.pp_print_list
+            ~pp_sep:pp_semi
+            pp_entry ppf sol_list
 
 end
 
-module Solve = struct
+module Solver = struct
     open UnionFind
+    exception Occurs_check
+
+    (* Checks whether type variable tv occurs in type t *)
+    let occurs_check tv ty =
+        let open Type in
+        let rec go =
+            function
+                | TVar tv' ->
+                    if tv = tv' then
+                        raise Occurs_check
+                | TFun (t1, t2) -> go t1; go t2
+                | _ -> ()
+        in
+        try go ty with
+            | Occurs_check ->
+                let err =
+                    Format.asprintf "Occurs check failed: %a occurs in %a"
+                        TyVar.pp tv
+                        Type.pp ty
+                in
+                raise (Errors.type_error err)
+
+
     (* Solves a constraint set via unification *)
     let solve : ConstraintSet.t -> Solution.t = fun constrs ->
-        let tvs : (TyVar.t, Type.t elem) Hashtbl.t = Hashtbl.create 30 in
-        let rec unify t1 t2 =
+        let tvs : (TyVar.t, (Type.t ) elem) Hashtbl.t = Hashtbl.create 30 in
+    
+        (* Assumes TVs has been populated at the end of a unification run. *)
+        (* Replaces all resolved TVs with the representative element, if it exists. *)
+        let rec resolve_ty =
             let open Type in
-            match (t1, t2) with
+            function
+                | TVar tv ->
+                    begin
+                        match Hashtbl.find_opt tvs tv with
+                            | Some point -> UnionFind.get point
+                            | None -> TVar tv
+                    end
+                | TFun (t1, t2) -> TFun (resolve_ty t1, resolve_ty t2)
+                | ty -> ty
+        in
+
+
+        let rec unify_points pt1 pt2 =
+            unify (UnionFind.get pt1) (UnionFind.get pt2)
+        and unify t1 t2 =
+            let open Type in
+            let find_point = Hashtbl.find_opt tvs in
+            match t1, t2 with
                  | t1, t2 when t1 = t2 -> ()
+                 | TFun (ta1, ta2), TFun (tb1, tb2) ->
+                    unify ta1 tb1; unify ta2 tb2
                  | TVar tv, t
                  | t, TVar tv ->
+                     occurs_check tv t;
                      begin
                          match Hashtbl.find_opt tvs tv with
-                            | Some point ->
-                                UnionFind.set point t
-                            | None -> Hashtbl.add tvs tv (UnionFind.make t)
+                            | Some point -> unify (UnionFind.get point) t
+                            | None ->
+                                Hashtbl.add tvs tv (UnionFind.make t)
                      end
-                | TFun (ta1, ta2), TFun (tb1, tb2) ->
-                    unify ta1 tb1; unify ta2 tb2
-                | _, _ -> failwith "unification failure"
+                | _, _ ->
+                    let err =
+                        Format.asprintf "Cannot unify %a with %a"
+                            Type.pp t1
+                            Type.pp t2
+                    in
+                    raise (Type_error err)
         in
         ConstraintSet.iter (fun (t1, t2) -> unify t1 t2) constrs;
         Hashtbl.to_seq tvs
             |> List.of_seq
-            |> List.map (fun (tv, point) -> (tv, UnionFind.get point))
+            |> List.map (fun (tv, point) -> (tv, resolve_ty (UnionFind.get point)))
             |> Solution.of_list
 end
 
-let () = print_endline "Hello, World!"
+module Repl = struct
+    let pipeline str =
+        let expr = Parse.parse_string str () in
+        let (ty, constrs) = Typecheck.typecheck expr in
+        Format.printf "Unsolved type: %a\n" Type.pp ty;
+        Format.printf "Constraint set: %a\n" ConstraintSet.pp constrs;
+        let sol = Solver.solve constrs in
+        Format.printf "Solution: %a\n" Solution.pp sol;
+        Solution.apply sol ty
+
+    let rec repl () =
+        Ast.TyVar.reset ();
+        print_newline ();
+        print_string "> ";
+        let str = read_line () in
+        let () =
+            try
+                let ty = pipeline str in
+                Format.printf "Solved type: %a\n" Type.pp ty
+            with
+                | Parse_error err ->
+                    Format.printf "[Parse error] %s\n" err
+                | Type_error err ->
+                    Format.printf "[Type error] %s\n" err
+                | exn -> Format.printf "[Error] %s\n" (Printexc.to_string exn)
+        in
+        let () = Format.print_flush () in
+        repl ()
+end
+
+let () = Repl.repl ()

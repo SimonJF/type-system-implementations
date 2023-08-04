@@ -1,6 +1,7 @@
 (lang dune 3.6)
 
 (name stlc_noann)
+(using menhir 2.1)
 
 (generate_opam_files true)
 
@@ -19,7 +20,7 @@
  (name stlc_noann)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml dune)
+ (depends ocaml dune menhir unionFind)
  (tags
   (topics "to describe" your project)))
 
