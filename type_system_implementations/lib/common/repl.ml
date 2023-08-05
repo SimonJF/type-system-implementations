@@ -25,6 +25,6 @@ module Make(Language: LANGUAGE) = struct
                 | exn -> Format.printf "[Error] %s\n" (Printexc.to_string exn)
         in
         let () = Format.print_flush () in
-        repl ()
+        repl ~prompt ()
  
 end

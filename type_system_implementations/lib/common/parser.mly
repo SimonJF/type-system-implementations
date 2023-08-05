@@ -37,7 +37,6 @@ expr :
   | IF expr THEN expr ELSE expr
       { Expr_constructors.mk_if $2 $4 $6 }
   | fact basic_expr { Expr_constructors.mk_app $1 $2 }
-  | LPAREN expr COLON ty RPAREN { Expr_constructors.mk_ann $2 $4 }
   | basic_expr { $1 }
 
 basic_expr :
@@ -57,7 +56,8 @@ basic_expr :
 
 
 fact :
-    LPAREN expr RPAREN { $2 }
+  | LPAREN expr COLON ty RPAREN { Expr_constructors.mk_ann $2 $4 }
+  | LPAREN expr RPAREN { $2 }
   | ID { try find table $1 with Not_found -> Expr_constructors.mk_variable ($1) }
   | STRINGV { Expr_constructors.mk_constant (Constant.CString $1) }
   | INTV { Expr_constructors.mk_constant (Constant.CInt $1) }

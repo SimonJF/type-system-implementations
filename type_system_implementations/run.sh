@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-dune exec type_system_implementations -- $@
+rlwrap dune exec type_system_implementations -- $@
