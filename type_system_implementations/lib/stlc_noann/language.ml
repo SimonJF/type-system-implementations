@@ -215,6 +215,12 @@ module Typecheck = struct
                 let env' = StringMap.add bnd ty1 env in
                 let (ty2, constrs2) = tc env' e2 in
                 ty2, ConstraintSet.union constrs1 constrs2
+            | EAnn (e, ann) ->
+                let (ty, constrs1) = tc env e in
+                let constrs2 =
+                    ConstraintSet.make_singleton ty ann
+                in
+                ann, ConstraintSet.union constrs1 constrs2
             | EIf (e1, e2, e3) ->
                 let (ty1, constrs1) = tc env e1 in
                 let (ty2, constrs2) = tc env e2 in
@@ -260,6 +266,7 @@ module Language : LANGUAGE = struct
         let mk_bin_op op e1 e2 = EBinOp (op, e1, e2)
         let mk_fun x ann body = EFun (x, ann, body)
         let mk_app e1 e2 = EApp (e1, e2)
+        let mk_ann e t = EAnn (e, t)
         let mk_if cond t e = EIf (cond, t, e)
     end
 

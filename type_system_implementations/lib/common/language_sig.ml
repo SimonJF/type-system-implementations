@@ -33,6 +33,7 @@ module type LANGUAGE = sig
         val mk_bin_op : BinOp.t -> Expr.t -> Expr.t -> Expr.t
         val mk_fun : binder -> Type.t option -> Expr.t -> Expr.t
         val mk_app : Expr.t -> Expr.t -> Expr.t
+        val mk_ann : Expr.t -> Type.t -> Expr.t
         val mk_if : Expr.t -> Expr.t -> Expr.t -> Expr.t
     end
 

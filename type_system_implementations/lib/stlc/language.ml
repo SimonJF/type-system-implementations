@@ -81,6 +81,19 @@ module Typecheck = struct
                 let env' = StringMap.add bnd ty1 env in
                 let ty2 = tc env' e2 in
                 ty2
+            | EAnn (e, ann) ->
+                let ty = tc env e in
+                let () =
+                    if (ty <> ann) then
+                        let err =
+                            Format.asprintf
+                                "Type of expression didn't match annotation. Expected %a but got %a."
+                                Type.pp ann
+                                Type.pp ty
+                        in
+                        raise (Errors.type_error err)
+                in
+                ty
             | EIf (e1, e2, e3) ->
                 let ty1 = tc env e1 in
                 let ty2 = tc env e2 in
@@ -123,6 +136,7 @@ module Language : LANGUAGE = struct
                 | Some ty -> EFun (x, ty, body)
                 | None -> raise (Common.Errors.parse_error "In STLC, all binders must be annotated")
         let mk_app e1 e2 = EApp (e1, e2)
+        let mk_ann e t = EAnn (e, t)
         let mk_if cond t e = EIf (cond, t, e)
     end
 

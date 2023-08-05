@@ -37,6 +37,7 @@ expr :
   | IF expr THEN expr ELSE expr
       { Expr_constructors.mk_if $2 $4 $6 }
   | fact basic_expr { Expr_constructors.mk_app $1 $2 }
+  | LPAREN expr COLON ty RPAREN { Expr_constructors.mk_ann $2 $4 }
   | basic_expr { $1 }
 
 basic_expr :

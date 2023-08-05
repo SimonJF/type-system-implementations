@@ -49,5 +49,6 @@ module Expr = struct
         | EBinOp of (BinOp.t * t * t)
         | EFun of (binder * ty option * t)
         | EApp of (t * t)
+        | EAnn of (t * ty)
         | EIf of (t * t * t)
 end
