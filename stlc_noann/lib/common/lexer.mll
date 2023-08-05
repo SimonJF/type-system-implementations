@@ -1,11 +1,9 @@
 {
-  open Lexing;;
-  open Parser;;
-  open Bytes;;
+  open Lexing
+  open Tokens
 
-  exception Lexical_error of string;;
+  exception Lexical_error of string
 
-  (* Support functions for comments *)
   let comments = ref 0;;
 
   let open_comment () =

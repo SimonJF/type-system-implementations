@@ -1,7 +1,7 @@
 open Common.Ast_sig
 open Common.Common_types
 
-module TyVar : TYVAR = struct
+module TyVar = struct
     type t = string
     let source = ref 0
     
@@ -15,7 +15,7 @@ module TyVar : TYVAR = struct
     let pp = Format.pp_print_string
 end
 
-module Type : (TYPE with type tyvar = TyVar.t) = struct
+module Type = struct
     type tyvar = TyVar.t
     type t =
         | TVar of TyVar.t
@@ -42,7 +42,7 @@ module Type : (TYPE with type tyvar = TyVar.t) = struct
             | TFun (t1, t2) -> Format.fprintf ppf "(%a -> %a)" pp t1 pp t2
 end
 
-module Expr : (EXPR with type ty = Type.t) = struct
+module Expr = struct
     type ty = Type.t
     type binder = string
     type variable = string

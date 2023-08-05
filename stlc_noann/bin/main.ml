@@ -1,5 +1,8 @@
 open Ast
-open Errors
+open Common
+open Ast_sig
+open Common_types
+
 
 module Constraint = struct
     type t = Type.t * Type.t
@@ -21,98 +24,6 @@ module ConstraintSet = struct
         Format.pp_print_list
             ~pp_sep:pp_semi
             Constraint.pp ppf xs
-end
-
-module Typecheck = struct
-    module StringMap = Map.Make(String)
-
-    type env = Type.t StringMap.t
-
-    (* Typechecking: constructs a type and constraint set *)
-    let rec tc env =
-        let open Expr in
-        let open Type in
-        let tc_const = function
-            | Constant.CString _ -> TString
-            | Constant.CBool _ -> TBool
-            | Constant.CInt _ -> TInt
-            | Constant.CUnit -> TUnit
-        in
-        let tc_binop op e1 e2 =
-            let open BinOp in
-            let (ty1, constrs1) = tc env e1 in
-            let (ty2, constrs2) = tc env e2 in
-            match op with
-                | And | Or ->
-                    let constrs =
-                        ConstraintSet.of_list [
-                           Constraint.make ty1 Type.TBool;
-                           Constraint.make ty2 Type.TBool;
-                        ]
-                    in
-                    (TBool, ConstraintSet.union_many [constrs1; constrs2; constrs])
-                (* Polymorphic equality *)
-                | Eq | NEq ->
-                    let constrs =
-                        ConstraintSet.make_singleton ty1 ty2
-                    in
-                    (TBool, ConstraintSet.union_many [constrs1; constrs2; constrs])
-                (* Relational numeric operators *)
-                | LT | GT | LEq | GEq ->
-                    let constrs =
-                        ConstraintSet.of_list [
-                           Constraint.make ty1 Type.TInt;
-                           Constraint.make ty2 Type.TInt;
-                        ]
-                    in
-                    (TBool, ConstraintSet.union_many [constrs1; constrs2; constrs])
-                (* Numeric operators *)
-                | Add | Mul | Sub | Div ->
-                    let constrs =
-                        ConstraintSet.of_list [
-                           Constraint.make ty1 Type.TInt;
-                           Constraint.make ty2 Type.TInt;
-                        ]
-                    in
-                    (TInt, ConstraintSet.union_many [constrs1; constrs2; constrs])
-        in
-        function
-            | EVar v -> StringMap.find v env, ConstraintSet.empty
-            | EFun (bnd, body) ->
-                let ftv = TVar (TyVar.fresh ()) in
-                let env' = StringMap.add bnd ftv env in
-                let (body_ty, body_constrs) = tc env' body in
-                TFun (ftv, body_ty), body_constrs
-            | EApp (e1, e2) ->
-                let ftv = TVar (TyVar.fresh ()) in
-                let (ty1, constrs1) = tc env e1 in
-                let (ty2, constrs2) = tc env e2 in
-                let funty_constr =
-                    ConstraintSet.make_singleton ty1 (TFun (ty2, ftv))
-                in
-                ftv, ConstraintSet.union_many [constrs1; constrs2; funty_constr]
-            | EBinOp (op, e1, e2) -> tc_binop op e1 e2
-            | EConst c -> tc_const c, ConstraintSet.empty
-            | ELet (bnd, e1, e2) ->
-                let (ty1, constrs1) = tc env e1 in
-                let env' = StringMap.add bnd ty1 env in
-                let (ty2, constrs2) = tc env' e2 in
-                ty2, ConstraintSet.union constrs1 constrs2
-            | EIf (e1, e2, e3) ->
-                let (ty1, constrs1) = tc env e1 in
-                let (ty2, constrs2) = tc env e2 in
-                let (ty3, constrs3) = tc env e3 in
-                let new_constrs = ConstraintSet.of_list [
-                   Constraint.make ty1 TBool;
-                   Constraint.make ty2 ty3
-                ]
-                in
-                let constrs =
-                    ConstraintSet.union_many [constrs1; constrs2; constrs3; new_constrs]
-                in
-                ty2, constrs
-
-    let typecheck = tc StringMap.empty
 end
 
 module Solution = struct
@@ -211,7 +122,7 @@ module Solver = struct
                             Type.pp t1
                             Type.pp t2
                     in
-                    raise (Type_error err)
+                    raise (Errors.type_error err)
         in
         ConstraintSet.iter (fun (t1, t2) -> unify t1 t2) constrs;
         Hashtbl.to_seq tvs
@@ -220,34 +131,119 @@ module Solver = struct
             |> Solution.of_list
 end
 
-module Repl = struct
-    let pipeline str =
-        let expr = Parse.parse_string str () in
-        let (ty, constrs) = Typecheck.typecheck expr in
+
+(* TODO: To make this compile when instantiating it in the REPL I think we will
+   need Typecheck to be a functor taking an AST as an argument (even though we
+   know the exact implementation here).
+
+   In order to allow pattern matching we might be able to do something with the
+   'with type' notation.
+ *)
+module Typecheck = struct
+    module StringMap = Map.Make(String)
+
+    type env = Type.t StringMap.t
+
+    (* Typechecking: constructs a type and constraint set *)
+    let rec tc env =
+        let open Expr in
+        let open Type in
+        let tc_const = function
+            | Constant.CString _ -> TString
+            | Constant.CBool _ -> TBool
+            | Constant.CInt _ -> TInt
+            | Constant.CUnit -> TUnit
+        in
+        let tc_binop op e1 e2 =
+            let open BinOp in
+            let (ty1, constrs1) = tc env e1 in
+            let (ty2, constrs2) = tc env e2 in
+            match op with
+                | And | Or ->
+                    let constrs =
+                        ConstraintSet.of_list [
+                           Constraint.make ty1 Type.TBool;
+                           Constraint.make ty2 Type.TBool;
+                        ]
+                    in
+                    (TBool, ConstraintSet.union_many [constrs1; constrs2; constrs])
+                (* Polymorphic equality *)
+                | Eq | NEq ->
+                    let constrs =
+                        ConstraintSet.make_singleton ty1 ty2
+                    in
+                    (TBool, ConstraintSet.union_many [constrs1; constrs2; constrs])
+                (* Relational numeric operators *)
+                | LT | GT | LEq | GEq ->
+                    let constrs =
+                        ConstraintSet.of_list [
+                           Constraint.make ty1 Type.TInt;
+                           Constraint.make ty2 Type.TInt;
+                        ]
+                    in
+                    (TBool, ConstraintSet.union_many [constrs1; constrs2; constrs])
+                (* Numeric operators *)
+                | Add | Mul | Sub | Div ->
+                    let constrs =
+                        ConstraintSet.of_list [
+                           Constraint.make ty1 Type.TInt;
+                           Constraint.make ty2 Type.TInt;
+                        ]
+                    in
+                    (TInt, ConstraintSet.union_many [constrs1; constrs2; constrs])
+        in
+        function
+            | EVar v -> StringMap.find v env, ConstraintSet.empty
+            | EFun (bnd, body) ->
+                let ftv = TVar (TyVar.fresh ()) in
+                let env' = StringMap.add bnd ftv env in
+                let (body_ty, body_constrs) = tc env' body in
+                TFun (ftv, body_ty), body_constrs
+            | EApp (e1, e2) ->
+                let ftv = TVar (TyVar.fresh ()) in
+                let (ty1, constrs1) = tc env e1 in
+                let (ty2, constrs2) = tc env e2 in
+                let funty_constr =
+                    ConstraintSet.make_singleton ty1 (TFun (ty2, ftv))
+                in
+                ftv, ConstraintSet.union_many [constrs1; constrs2; funty_constr]
+            | EBinOp (op, e1, e2) -> tc_binop op e1 e2
+            | EConst c -> tc_const c, ConstraintSet.empty
+            | ELet (bnd, e1, e2) ->
+                let (ty1, constrs1) = tc env e1 in
+                let env' = StringMap.add bnd ty1 env in
+                let (ty2, constrs2) = tc env' e2 in
+                ty2, ConstraintSet.union constrs1 constrs2
+            | EIf (e1, e2, e3) ->
+                let (ty1, constrs1) = tc env e1 in
+                let (ty2, constrs2) = tc env e2 in
+                let (ty3, constrs3) = tc env e3 in
+                let new_constrs = ConstraintSet.of_list [
+                   Constraint.make ty1 TBool;
+                   Constraint.make ty2 ty3
+                ]
+                in
+                let constrs =
+                    ConstraintSet.union_many [constrs1; constrs2; constrs3; new_constrs]
+                in
+                ty2, constrs
+
+    let typecheck expr =
+        let (ty, constrs) = tc StringMap.empty expr in
         Format.printf "Unsolved type: %a\n" Type.pp ty;
         Format.printf "Constraint set: %a\n" ConstraintSet.pp constrs;
         let sol = Solver.solve constrs in
         Format.printf "Solution: %a\n" Solution.pp sol;
         Solution.apply sol ty
-
-    let rec repl () =
-        Ast.TyVar.reset ();
-        print_newline ();
-        print_string "> ";
-        let str = read_line () in
-        let () =
-            try
-                let ty = pipeline str in
-                Format.printf "Solved type: %a\n" Type.pp ty
-            with
-                | Parse_error err ->
-                    Format.printf "[Parse error] %s\n" err
-                | Type_error err ->
-                    Format.printf "[Type error] %s\n" err
-                | exn -> Format.printf "[Error] %s\n" (Printexc.to_string exn)
-        in
-        let () = Format.print_flush () in
-        repl ()
 end
+
+module Ast : AST = struct
+    module TyVar = TyVar
+    module Type = Type
+    module Expr = Expr
+
+end
+
+module Repl = Repl.Make(Ast)(Typecheck)
 
 let () = Repl.repl ()

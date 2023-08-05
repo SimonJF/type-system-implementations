@@ -1,48 +1,11 @@
+%parameter<Ast : Ast_sig.AST>
 %{
   open Hashtbl
-  open Common.Common_types
+  open Common_types
   open Ast
 
   let table = create 1024;;
 %}
-
-/* Keyword tokens */
-%token LAMBDA
-%token LET
-%token IN
-%token TRUE
-%token FALSE
-%token IF
-%token THEN
-%token ELSE
-%token STRING
-%token INT
-%token BOOL
-%token UNIT
-%token UNITV
-
-/* Identifiers tokens */
-%token <string> ID
-%token <string> STRINGV
-%token <int> INTV
-
-/* Symbolic tokens */
-%token LPAREN
-%token RPAREN
-%token DOT
-%token EQ
-%token ARROW
-%token EOF
-%token AND OR
-%token LT GT GEQ LEQ EQQ NEQ
-%token PLUS MINUS
-%token STAR DIV
-
-/* Precedence */
-%left AND OR
-%left LT GT GEQ LEQ EQQ NEQ
-%left PLUS MINUS
-%left STAR DIV
 
 %start expr_main
 %start ty_main

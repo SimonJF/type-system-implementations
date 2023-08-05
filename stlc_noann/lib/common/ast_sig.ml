@@ -35,3 +35,9 @@ module type EXPR = sig
     val mk_app : t -> t -> t
     val mk_if : t -> t -> t -> t
 end
+
+module type AST = sig
+    module TyVar : TYVAR
+    module Type : TYPE
+    module Expr : EXPR
+end
