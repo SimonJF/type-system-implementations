@@ -26,13 +26,6 @@ module Type = struct
         let point = snd
         let compare (tv1, _) (tv2, _) = String.compare tv1 tv2
     end
-    
-    let mk_var v = TVar v
-    let mk_int = TInt
-    let mk_bool = TBool
-    let mk_string = TString
-    let mk_unit = TUnit
-    let mk_fun t1 t2 = TFun (t1, t2)
 
     let rec pp ppf =
         function
@@ -57,12 +50,4 @@ module Expr = struct
         | EFun of (binder * t)
         | EApp of (t * t)
         | EIf of (t * t * t)
-
-    let mk_constant c = EConst c
-    let mk_variable v = EVar v
-    let mk_let x e1 e2 = ELet (x, e1, e2)
-    let mk_bin_op op e1 e2 = EBinOp (op, e1, e2)
-    let mk_fun x _ body = EFun (x, body)
-    let mk_app e1 e2 = EApp (e1, e2)
-    let mk_if cond t e = EIf (cond, t, e)
 end

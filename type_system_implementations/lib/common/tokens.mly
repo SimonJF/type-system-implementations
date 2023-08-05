@@ -27,6 +27,7 @@
 %token LT GT GEQ LEQ EQQ NEQ
 %token PLUS MINUS
 %token STAR DIV
+%token COLON
 
 /* Precedence */
 %left AND OR

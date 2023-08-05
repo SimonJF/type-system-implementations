@@ -1,6 +1,7 @@
 open Common.Language_sig
 
 let languages = [
+    ("stlc", (module Stlc.Language.Language : LANGUAGE));
     ("stlc_noann", (module Stlc_noann.Language.Language : LANGUAGE));
     ("stlc_noann_onthefly", (module Stlc_noann_onthefly.Language.Language : LANGUAGE))
 ]

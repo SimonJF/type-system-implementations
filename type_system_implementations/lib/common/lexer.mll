@@ -33,6 +33,7 @@ rule token = parse
   | '/'      { DIV }
   | '+'      { PLUS }
   | '-'      { MINUS }
+  | ':'      { COLON }
   | "&&"     { AND }
   | "||"     { OR }
   | ">="     { GEQ }

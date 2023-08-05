@@ -1,23 +1,7 @@
 open Common.Common_types
 
-module TyVar = struct
-    type t = string
-    let source = ref 0
-    
-    let reset () = source := 0
-
-    let fresh ?(prefix="_") () =
-        let sym = !source in
-        let () = incr source in
-        prefix ^ (string_of_int sym)
-
-    let pp = Format.pp_print_string
-end
-
 module Type = struct
-    type tyvar = TyVar.t
     type t =
-        | TVar of TyVar.t
         | TInt
         | TBool
         | TString
@@ -26,7 +10,6 @@ module Type = struct
 
     let rec pp ppf =
         function
-            | TVar tv -> TyVar.pp ppf tv
             | TInt -> Format.pp_print_string ppf "Int"
             | TBool -> Format.pp_print_string ppf "Bool"
             | TString -> Format.pp_print_string ppf "String"
@@ -44,7 +27,7 @@ module Expr = struct
         | EConst of Constant.t
         | ELet of (binder * t * t)
         | EBinOp of (BinOp.t * t * t)
-        | EFun of (binder * t)
+        | EFun of (binder * ty * t)
         | EApp of (t * t)
         | EIf of (t * t * t)
 end

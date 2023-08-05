@@ -237,6 +237,26 @@ module Language : LANGUAGE = struct
     module Type = Type
     module Expr = Expr
 
+    module Type_constructors = struct
+        open Type
+        let mk_int = TInt
+        let mk_bool = TBool
+        let mk_string = TString
+        let mk_unit = TUnit
+        let mk_fun t1 t2 = TFun (t1, t2)
+    end
+
+    module Expr_constructors = struct
+        open Expr
+        let mk_constant c = EConst c
+        let mk_variable v = EVar v
+        let mk_let x e1 e2 = ELet (x, e1, e2)
+        let mk_bin_op op e1 e2 = EBinOp (op, e1, e2)
+        let mk_fun x _ body = EFun (x, body)
+        let mk_app e1 e2 = EApp (e1, e2)
+        let mk_if cond t e = EIf (cond, t, e)
+    end
+
     let typecheck = Typecheck.typecheck
     let reset_state = TyVar.reset
 end
