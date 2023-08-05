@@ -96,13 +96,8 @@ module Solver = struct
                 | TFun (t1, t2) -> TFun (resolve_ty t1, resolve_ty t2)
                 | ty -> ty
         in
-
-
-        let rec unify_points pt1 pt2 =
-            unify (UnionFind.get pt1) (UnionFind.get pt2)
-        and unify t1 t2 =
+        let rec unify t1 t2 =
             let open Type in
-            let find_point = Hashtbl.find_opt tvs in
             match t1, t2 with
                  | t1, t2 when t1 = t2 -> ()
                  | TFun (ta1, ta2), TFun (tb1, tb2) ->
@@ -244,7 +239,3 @@ module Language : LANGUAGE = struct
 
     let typecheck = Typecheck.typecheck
 end
-
-module Repl = Repl.Make(Language)
-
-let () = Repl.repl ()

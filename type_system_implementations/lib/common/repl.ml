@@ -8,10 +8,9 @@ module Make(Language: LANGUAGE) = struct
         let expr = MyParse.parse_string str () in
         Language.typecheck expr
 
-    let rec repl () =
+    let rec repl ?(prompt="") () =
         TyVar.reset ();
-        print_newline ();
-        print_string "> ";
+        print_string (prompt ^ "> ");
         let str = read_line () in
         let () =
             let open Errors in

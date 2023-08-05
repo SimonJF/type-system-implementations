@@ -1,4 +1,3 @@
-open Common.Language_sig
 open Common.Common_types
 
 module TyVar = struct
