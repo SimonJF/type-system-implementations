@@ -111,11 +111,17 @@ module Typecheck = struct
         in
         function
             | EVar v -> StringMap.find v env
-            | EFun (bnd, body) ->
-                let ftv = TVar (TyVar.fresh ()) in
-                let env' = StringMap.add bnd ftv env in
+            | EFun (bnd, ty_opt, body) ->
+                (* If we have a type annotation, use that --
+                   otherwise create fresh type variable *)
+                let arg_ty =
+                    match ty_opt with
+                        | Some ann -> ann
+                        | None -> TVar (TyVar.fresh ())
+                in
+                let env' = StringMap.add bnd arg_ty env in
                 let body_ty = tc env' body in
-                TFun (ftv, body_ty)
+                TFun (arg_ty, body_ty)
             | EApp (e1, e2) ->
                 let ftv = TVar (TyVar.fresh ()) in
                 let ty1 = tc env e1 in
@@ -175,7 +181,7 @@ module Language : LANGUAGE = struct
         let mk_variable v = EVar v
         let mk_let x e1 e2 = ELet (x, e1, e2)
         let mk_bin_op op e1 e2 = EBinOp (op, e1, e2)
-        let mk_fun x _ body = EFun (x, body)
+        let mk_fun x ann body = EFun (x, ann, body)
         let mk_app e1 e2 = EApp (e1, e2)
         let mk_if cond t e = EIf (cond, t, e)
     end

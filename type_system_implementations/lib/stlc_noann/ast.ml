@@ -44,7 +44,7 @@ module Expr = struct
         | EConst of Constant.t
         | ELet of (binder * t * t)
         | EBinOp of (BinOp.t * t * t)
-        | EFun of (binder * t)
+        | EFun of (binder * ty option * t)
         | EApp of (t * t)
         | EIf of (t * t * t)
 end
