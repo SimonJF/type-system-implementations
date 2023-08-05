@@ -36,8 +36,10 @@ module type EXPR = sig
     val mk_if : t -> t -> t -> t
 end
 
-module type AST = sig
+module type LANGUAGE = sig
     module TyVar : TYVAR
     module Type : TYPE
     module Expr : EXPR
+
+    val typecheck : Expr.t -> Type.t
 end

@@ -1,17 +1,12 @@
-open Ast_sig
+open Language_sig
 
-module Make
-        (Ast: AST)
-        (Typecheck: sig val typecheck : Ast.Expr.t -> Ast.Type.t end)
-        = struct
-
-    open Ast
-
-    module MyParse = Parse.Make(Ast)
+module Make(Language: LANGUAGE) = struct
+    open Language
+    module MyParse = Parse.Make(Language)
 
     let pipeline str =
         let expr = MyParse.parse_string str () in
-        Typecheck.typecheck expr
+        Language.typecheck expr
 
     let rec repl () =
         TyVar.reset ();

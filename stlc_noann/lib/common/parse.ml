@@ -1,9 +1,9 @@
 open Lexer
 open Lexing
-open Ast_sig
+open Language_sig
 
-module Make(Ast : AST) = struct
-    module MyParser = Parser.Make(Ast)
+module Make(Language : LANGUAGE) = struct
+    module MyParser = Parser.Make(Language)
 
     let print_position ppf lexbuf =
       let pos = lexbuf.lex_curr_p in

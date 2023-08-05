@@ -1,6 +1,6 @@
 open Ast
 open Common
-open Ast_sig
+open Language_sig
 open Common_types
 
 
@@ -237,13 +237,14 @@ module Typecheck = struct
         Solution.apply sol ty
 end
 
-module Ast : AST = struct
+module Language : LANGUAGE = struct
     module TyVar = TyVar
     module Type = Type
     module Expr = Expr
 
+    let typecheck = Typecheck.typecheck
 end
 
-module Repl = Repl.Make(Ast)(Typecheck)
+module Repl = Repl.Make(Language)
 
 let () = Repl.repl ()

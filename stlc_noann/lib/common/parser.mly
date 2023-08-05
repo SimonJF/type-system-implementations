@@ -1,16 +1,16 @@
-%parameter<Ast : Ast_sig.AST>
+%parameter<Language : Language_sig.LANGUAGE>
 %{
   open Hashtbl
   open Common_types
-  open Ast
+  open Language
 
   let table = create 1024;;
 %}
 
 %start expr_main
 %start ty_main
-%type <Ast.Expr.t> expr_main
-%type <Ast.Type.t> ty_main
+%type <Language.Expr.t> expr_main
+%type <Language.Type.t> ty_main
 
 %%
 
