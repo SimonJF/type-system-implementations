@@ -9,7 +9,7 @@ module Make(Language: LANGUAGE) = struct
         Language.typecheck expr
 
     let rec repl ?(prompt="") () =
-        TyVar.reset ();
+        Language.reset_state ();
         print_string (prompt ^ "> ");
         let str = read_line () in
         let () =

@@ -1,0 +1,3 @@
+(library
+ (name stlc_noann_onthefly)
+ (libraries unionFind common))

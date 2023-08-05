@@ -1,16 +1,7 @@
 open Common_types
 
-module type TYVAR = sig
-    type t
-    val reset : unit -> unit
-    val fresh : ?prefix:string -> unit -> t
-    val pp : Format.formatter -> t -> unit
-end
-
 module type TYPE = sig
     type t
-    type tyvar
-    val mk_var : tyvar -> t
     val mk_int : t
     val mk_bool : t
     val mk_string : t
@@ -37,9 +28,9 @@ module type EXPR = sig
 end
 
 module type LANGUAGE = sig
-    module TyVar : TYVAR
     module Type : TYPE
     module Expr : EXPR
 
     val typecheck : Expr.t -> Type.t
+    val reset_state : unit -> unit
 end

@@ -238,4 +238,5 @@ module Language : LANGUAGE = struct
     module Expr = Expr
 
     let typecheck = Typecheck.typecheck
+    let reset_state = TyVar.reset
 end
