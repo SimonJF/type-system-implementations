@@ -7,6 +7,7 @@ let languages = [
     ("bidir", (module Bidir.Language.Language : LANGUAGE));
     ("hindley_milner", (module Hindley_milner.Language.Language : LANGUAGE));
     ("cocontextual", (module Cocontextual.Language.Unrestricted : LANGUAGE));
+    ("cocontextual_linear", (module Cocontextual.Language.Linear : LANGUAGE));
 ]
 
 let () =

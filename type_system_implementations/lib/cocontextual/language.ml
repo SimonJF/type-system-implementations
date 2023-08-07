@@ -151,6 +151,7 @@ module Typecheck = struct
     (* Typechecking: constructs a type, an environment, and a constraint set *)
     (* Takes merge: env -> env -> (env * constrs) as an argument *)
     let typecheck_expr check_env merge merge_branch e =
+        (*
         let merge_many merge_fn =
             List.fold_left
                 (fun (acc, constrs) env ->
@@ -158,6 +159,7 @@ module Typecheck = struct
                     (acc', ConstraintSet.union constrs merge_constrs))
                 (Env.empty, ConstraintSet.empty)
         in
+        *)
         let rec tc =
             let open Expr in
             let open Type in
@@ -216,19 +218,14 @@ module Typecheck = struct
                 | EFun (bnd, ty_opt, body) ->
                     (* Typecheck the body to get env *)
                     let (body_ty, env, body_constrs) = tc body in
+                    let arg_ty = Type.fresh_var () in
                     (* If we have an annotation and use the variable in the body, we need to
                        generate a constraint *)
-                    let arg_ty = Type.fresh_var () in
-                    let arg_constrs =
-                        match Env.find_opt bnd env with
-                            | Some ty -> ConstraintSet.make_singleton arg_ty ty
-                            | None -> ConstraintSet.empty
-                    in
+                    let arg_constrs = check_env bnd arg_ty env in
                     let ann_constrs =
-                        match ty_opt, Env.find_opt bnd env with
-                            | Some ann, Some inferred ->
-                                    ConstraintSet.make_singleton inferred ann
-                            | _, _ -> ConstraintSet.empty
+                        match ty_opt with
+                            | Some ann -> check_env bnd ann env
+                            | _ -> ConstraintSet.empty
                     in
                     let constrs =
                         ConstraintSet.union_many [
@@ -277,10 +274,12 @@ module Typecheck = struct
                        Constraint.make ty2 ty3
                     ]
                     in
-                    let (env, env_constrs) = merge_many merge_branch [env1; env2; env3] in
+                    let (branches_env, branches_env_constrs) = merge_branch env2 env3 in
+                    let (env, env_constrs) = merge env1 branches_env in
                     let constrs =
                         ConstraintSet.union_many
-                            [constrs1; constrs2; constrs3; env_constrs; new_constrs]
+                            [constrs1; constrs2; constrs3; env_constrs;
+                            new_constrs; branches_env_constrs; env_constrs]
                     in
                     ty2, env, constrs
                 | ELetPair (x, y, e1, e2) ->
@@ -419,9 +418,62 @@ module Unrestricted : LANGUAGE = struct
     let typecheck = Typecheck.typecheck check merge merge_branch
 end
 
-(*
 module Linear = struct
     include Core
-end
-*)
 
+    (* Since all variables *must* be used, if we don't find a let- or lambda-bound
+       variable in an inferred environment, then it is a type error. *)
+    let check x ty env =
+        match Env.find_opt x env with
+            | Some env_ty -> ConstraintSet.make_singleton ty env_ty
+            | None ->
+                raise (Errors.type_error ("Unused linear variable " ^ x))
+
+    (* In sequential control flow, two merged environments must be disjoint *)
+    let merge env1 env2 =
+       (* For non-overlapping, simply union environments *)
+       let env =
+           Env.merge (fun x ty1_opt ty2_opt ->
+               match ty1_opt, ty2_opt with
+                 | Some _, Some _ ->
+                    raise (Errors.type_error ("Multiple uses of linear variable " ^ x))
+                 | Some ty, _ | _, Some ty -> Some ty
+                 | None, None -> None
+           ) env1 env2
+       in
+       env, ConstraintSet.empty
+
+    (* Dually, when we have branching control flow a variable must be used at
+       the same type in both branches. *)
+    let merge_branch env1 env2 =
+       (* Find overlapping entries *)
+       let overlapping_keys =
+           Env.bindings env1
+           |> List.filter_map
+                (fun (k, _) -> if Env.mem k env2 then Some k else None)
+       in
+       (* Create constraints for overlapping variables *)
+       let constrs =
+           List.map (fun k ->
+               Constraint.make (Env.find k env1) (Env.find k env2))
+               overlapping_keys
+           |> ConstraintSet.of_list
+       in
+       (* For non-overlapping, simply union environments *)
+       let env =
+           Env.merge (fun x ty1_opt ty2_opt ->
+               match ty1_opt, ty2_opt with
+                 (* Note: in Some,Some case, equality constraint already made *)
+                 | Some ty, Some _ -> Some ty
+                 | Some _, None | None, Some _ ->
+                     raise 
+                        (Errors.type_error
+                            (Format.asprintf "Variable %s used inconsistently across branches" x))
+                 | None, None -> None
+           ) env1 env2
+       in
+       env, constrs
+
+    let typecheck = Typecheck.typecheck check merge merge_branch
+
+end
