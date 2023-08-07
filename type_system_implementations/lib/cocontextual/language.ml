@@ -130,60 +130,33 @@ module Solver = struct
             |> Solution.of_list
 end
 
-
-(* TODO: To make this compile when instantiating it in the REPL I think we will
-   need Typecheck to be a functor taking an AST as an argument (even though we
-   know the exact implementation here).
-
-   In order to allow pattern matching we might be able to do something with the
-   'with type' notation.
- *)
-module Typecheck = struct
+(* Useful to hoist this out so that we can define module-local merge functions *)
+module Env = struct
     module StringMap = Map.Make(String)
+    type t = Type.t StringMap.t
 
-    type env = Type.t StringMap.t
+    let find : string -> t -> Type.t = StringMap.find
+    let find_opt : string -> t -> Type.t option = StringMap.find_opt
+    let bind : string -> Type.t -> t -> t = StringMap.add
+    let remove : string -> t -> t = StringMap.remove
+    let bindings : t -> (string * Type.t) list = StringMap.bindings
+    let singleton : string -> Type.t -> t = StringMap.singleton
+    let merge = StringMap.merge
+    let empty : t = StringMap.empty
+    let mem : string -> t -> bool = StringMap.mem
+end
 
-    let check_env x ty env =
-        match StringMap.find_opt x env with
-            | Some env_ty -> ConstraintSet.make_singleton ty env_ty
-            | None ->
-                (* NOTE: For a linear variant, need to raise an error here *)
-                ConstraintSet.empty
-
-    let merge_unrestricted env1 env2 =
-       (* Find overlapping entries *)
-       let overlapping_keys =
-           StringMap.bindings env1
-           |> List.filter_map
-                (fun (k, _) -> if StringMap.mem k env2 then Some k else None)
-       in
-       (* Create constraints for overlapping variables *)
-       let constrs =
-           List.map (fun k ->
-               Constraint.make (StringMap.find k env1) (StringMap.find k env2))
-               overlapping_keys
-           |> ConstraintSet.of_list
-       in
-       (* For non-overlapping, simply union environments *)
-       let env =
-           StringMap.merge (fun _ ty1_opt ty2_opt ->
-               match ty1_opt, ty2_opt with
-                 (* Note: in Some,Some case, constraint already made *)
-                 | Some ty, _ | _, Some ty -> Some ty
-                 | None, None -> None
-           ) env1 env2
-       in
-       env, constrs
+module Typecheck = struct 
 
     (* Typechecking: constructs a type, an environment, and a constraint set *)
     (* Takes merge: env -> env -> (env * constrs) as an argument *)
-    let typecheck_expr merge e =
-        let merge_many =
+    let typecheck_expr check_env merge merge_branch e =
+        let merge_many merge_fn =
             List.fold_left
                 (fun (acc, constrs) env ->
-                    let (acc', merge_constrs) = merge acc env in
+                    let (acc', merge_constrs) = merge_fn acc env in
                     (acc', ConstraintSet.union constrs merge_constrs))
-                (StringMap.empty, ConstraintSet.empty)
+                (Env.empty, ConstraintSet.empty)
         in
         let rec tc =
             let open Expr in
@@ -238,7 +211,7 @@ module Typecheck = struct
                     (* We don't have an environment to look things up in, so need to create a fresh TV 
                        and constrain on our way down the tree. *)
                     let tv = Type.fresh_var () in
-                    let env = StringMap.singleton v tv in
+                    let env = Env.singleton v tv in
                     tv, env, ConstraintSet.empty
                 | EFun (bnd, ty_opt, body) ->
                     (* Typecheck the body to get env *)
@@ -247,12 +220,12 @@ module Typecheck = struct
                        generate a constraint *)
                     let arg_ty = Type.fresh_var () in
                     let arg_constrs =
-                        match StringMap.find_opt bnd env with
+                        match Env.find_opt bnd env with
                             | Some ty -> ConstraintSet.make_singleton arg_ty ty
                             | None -> ConstraintSet.empty
                     in
                     let ann_constrs =
-                        match ty_opt, StringMap.find_opt bnd env with
+                        match ty_opt, Env.find_opt bnd env with
                             | Some ann, Some inferred ->
                                     ConstraintSet.make_singleton inferred ann
                             | _, _ -> ConstraintSet.empty
@@ -265,7 +238,7 @@ module Typecheck = struct
                         ]
                     in
                     (* Remove bound variable from environment *)
-                    let env = StringMap.remove bnd env in
+                    let env = Env.remove bnd env in
                     TFun (arg_ty, body_ty), env, constrs
                 | EApp (e1, e2) ->
                     let ftv = TVar (TyVar.fresh ()) in
@@ -277,14 +250,14 @@ module Typecheck = struct
                     let env, env_constrs = merge env1 env2 in
                     ftv, env, ConstraintSet.union_many [constrs1; constrs2; funty_constr; env_constrs]
                 | EBinOp (op, e1, e2) -> tc_binop op e1 e2
-                | EConst c -> tc_const c, StringMap.empty, ConstraintSet.empty
+                | EConst c -> tc_const c, Env.empty, ConstraintSet.empty
                 | ELet (bnd, e1, e2) ->
                     (* Typecheck e1 and e2; if x is in env2 then ensure it has same type as ty1 *)
                     let (ty1, env1, constrs1) = tc e1 in
                     let (ty2, env2, constrs2) = tc e2 in
 
                     let check_env_constrs = check_env bnd ty1 env2 in 
-                    let env, env_constrs = merge env1 (StringMap.remove bnd env2) in
+                    let env, env_constrs = merge env1 (Env.remove bnd env2) in
                     let constrs = ConstraintSet.union_many [
                         constrs1; constrs2; check_env_constrs; env_constrs]
                     in
@@ -304,11 +277,7 @@ module Typecheck = struct
                        Constraint.make ty2 ty3
                     ]
                     in
-                    (* Note: We need to do something a bit more sophisticated to
-                       lift this to linear type systems since we'll be wanting
-                       to ensure consistent variable use across the two
-                       branches, and then do the usual join with the conditional *)
-                    let (env, env_constrs) = merge_many [env1; env2; env3] in
+                    let (env, env_constrs) = merge_many merge_branch [env1; env2; env3] in
                     let constrs =
                         ConstraintSet.union_many
                             [constrs1; constrs2; constrs3; env_constrs; new_constrs]
@@ -332,8 +301,8 @@ module Typecheck = struct
                     in
                     let env =
                         env
-                        |> StringMap.remove x
-                        |> StringMap.remove y
+                        |> Env.remove x
+                        |> Env.remove y
                     in
                     ty2, env, constrs
                 | EPair (e1, e2) ->
@@ -349,15 +318,15 @@ module Typecheck = struct
                     TPair (Type.fresh_var (), ty), env, constrs
         in tc e
             
-    let typecheck expr =
-        let (ty, env, constrs) = typecheck_expr merge_unrestricted expr in
+    let typecheck check merge merge_branch expr =
+        let (ty, env, constrs) = typecheck_expr check merge merge_branch expr in
         Format.printf "Unsolved type: %a\n" Type.pp ty;
         Format.printf "Constraint set: %a\n" ConstraintSet.pp constrs;
         let sol = Solver.solve constrs in
         Format.printf "Solution: %a\n" Solution.pp sol;
         let solved_env =
             env
-            |> StringMap.bindings
+            |> Env.bindings
             |> List.map (fun (x, ty) -> (x, Solution.apply sol ty))
         in
 
@@ -374,7 +343,8 @@ module Typecheck = struct
         Solution.apply sol ty
 end
 
-module Language : LANGUAGE = struct
+(* Core co-contextual machinery, independent of environment checking / merging functions *)
+module Core  = struct
     module TyVar = TyVar
     module Type = Type
     module Expr = Expr
@@ -405,6 +375,53 @@ module Language : LANGUAGE = struct
         let mk_snd e = ESnd e
     end
 
-    let typecheck = Typecheck.typecheck
     let reset_state = TyVar.reset
 end
+
+module Unrestricted : LANGUAGE = struct
+    include Core
+
+    let check x ty env =
+        match Env.find_opt x env with
+            | Some env_ty -> ConstraintSet.make_singleton ty env_ty
+            | None -> ConstraintSet.empty
+
+    let merge env1 env2 =
+       (* Find overlapping entries *)
+       let overlapping_keys =
+           Env.bindings env1
+           |> List.filter_map
+                (fun (k, _) -> if Env.mem k env2 then Some k else None)
+       in
+       (* Create constraints for overlapping variables *)
+       let constrs =
+           List.map (fun k ->
+               Constraint.make (Env.find k env1) (Env.find k env2))
+               overlapping_keys
+           |> ConstraintSet.of_list
+       in
+       (* For non-overlapping, simply union environments *)
+       let env =
+           Env.merge (fun _ ty1_opt ty2_opt ->
+               match ty1_opt, ty2_opt with
+                 (* Note: in Some,Some case, constraint already made *)
+                 | Some ty, _ | _, Some ty -> Some ty
+                 | None, None -> None
+           ) env1 env2
+       in
+       env, constrs
+
+    (* When type system is unrestricted, merging environments arising from
+       branching control flow is the same as merging environments from sequential
+       control flow. *)
+    let merge_branch = merge
+
+    let typecheck = Typecheck.typecheck check merge merge_branch
+end
+
+(*
+module Linear = struct
+    include Core
+end
+*)
+

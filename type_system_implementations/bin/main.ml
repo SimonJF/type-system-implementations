@@ -6,7 +6,7 @@ let languages = [
     ("stlc_noann_onthefly", (module Stlc_noann_onthefly.Language.Language : LANGUAGE));
     ("bidir", (module Bidir.Language.Language : LANGUAGE));
     ("hindley_milner", (module Hindley_milner.Language.Language : LANGUAGE));
-    ("cocontextual", (module Cocontextual.Language.Language : LANGUAGE));
+    ("cocontextual", (module Cocontextual.Language.Unrestricted : LANGUAGE));
 ]
 
 let () =
