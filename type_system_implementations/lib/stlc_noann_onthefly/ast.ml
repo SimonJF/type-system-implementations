@@ -11,6 +11,7 @@ module Type = struct
         | TString
         | TUnit
         | TFun of (t * t)
+        | TPair of (t * t)
 
     module TyVar = struct
         let source = ref 0
@@ -27,6 +28,8 @@ module Type = struct
         let compare (tv1, _) (tv2, _) = String.compare tv1 tv2
     end
 
+    let fresh_var () = TVar (TyVar.fresh ())
+
     let rec pp ppf =
         function
             | TVar tv -> TyVar.pp ppf tv
@@ -35,6 +38,7 @@ module Type = struct
             | TString -> Format.pp_print_string ppf "String"
             | TUnit -> Format.pp_print_string ppf "Unit"
             | TFun (t1, t2) -> Format.fprintf ppf "(%a -> %a)" pp t1 pp t2
+            | TPair (t1, t2) -> Format.fprintf ppf "(%a * %a)" pp t1 pp t2
 end
 
 module Expr = struct
@@ -51,4 +55,8 @@ module Expr = struct
         | EApp of (t * t)
         | EAnn of (t * ty)
         | EIf of (t * t * t)
+        | EPair of (t * t)
+        | ELetPair of (variable * variable * t * t)
+        | EFst of t
+        | ESnd of t
 end

@@ -234,7 +234,31 @@ module Typecheck = struct
                     ConstraintSet.union_many [constrs1; constrs2; constrs3; new_constrs]
                 in
                 ty2, constrs
-
+            | ELetPair (x, y, e1, e2) ->
+                let (ty1, constrs1) = tc env e1 in
+                let var1 = Type.fresh_var () in
+                let var2 = Type.fresh_var () in
+                let pair_constrs =
+                    ConstraintSet.make_singleton (TPair (var1, var2)) ty1
+                in
+                let env = StringMap.add x var1 env in
+                let env = StringMap.add y var2 env in
+                let (ty2, constrs2) = tc env e2 in
+                let constrs =
+                    ConstraintSet.union_many [constrs1; constrs2; pair_constrs]
+                in
+                ty2, constrs
+            | EPair (e1, e2) ->
+                let (ty1, constrs1) = tc env e1 in
+                let (ty2, constrs2) = tc env e2 in
+                TPair (ty1, ty2), ConstraintSet.union constrs1 constrs2
+            | EFst e ->
+                let (ty, constrs) = tc env e in
+                TPair (ty, Type.fresh_var ()), constrs
+            | ESnd e ->
+                let (ty, constrs) = tc env e in
+                TPair (Type.fresh_var (), ty), constrs
+            
     let typecheck expr =
         let (ty, constrs) = tc StringMap.empty expr in
         Format.printf "Unsolved type: %a\n" Type.pp ty;
@@ -256,7 +280,7 @@ module Language : LANGUAGE = struct
         let mk_string = TString
         let mk_unit = TUnit
         let mk_fun t1 t2 = TFun (t1, t2)
-        let mk_pair _ _ = raise (Errors.unsupported "pair")
+        let mk_pair t1 t2 = TPair (t1, t2)
     end
 
     module Expr_constructors = struct
@@ -269,10 +293,10 @@ module Language : LANGUAGE = struct
         let mk_app e1 e2 = EApp (e1, e2)
         let mk_ann e t = EAnn (e, t)
         let mk_if cond t e = EIf (cond, t, e)
-        let mk_fst _ = raise (Errors.unsupported "fst")
-        let mk_snd _ = raise (Errors.unsupported "snd")
-        let mk_letpair _ _ _ _ = raise (Errors.unsupported "letpair")
-        let mk_pair _ _ = raise (Errors.unsupported "pair")
+        let mk_letpair x y e1 e2 = ELetPair (x, y, e1, e2)
+        let mk_pair e1 e2 = EPair (e1, e2)
+        let mk_fst e = EFst e
+        let mk_snd e = ESnd e
     end
 
     let typecheck = Typecheck.typecheck

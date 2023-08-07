@@ -23,6 +23,7 @@ module Type = struct
         | TString
         | TUnit
         | TFun of (t * t)
+        | TPair of (t * t)
 
     let rec pp ppf =
         function
@@ -32,6 +33,9 @@ module Type = struct
             | TString -> Format.pp_print_string ppf "String"
             | TUnit -> Format.pp_print_string ppf "Unit"
             | TFun (t1, t2) -> Format.fprintf ppf "(%a -> %a)" pp t1 pp t2
+            | TPair (t1, t2) -> Format.fprintf ppf "(%a * %a)" pp t1 pp t2
+
+    let fresh_var () = TVar (TyVar.fresh ())
 end
 
 module Expr = struct
@@ -48,4 +52,8 @@ module Expr = struct
         | EApp of (t * t)
         | EAnn of (t * ty)
         | EIf of (t * t * t)
+        | EPair of (t * t)
+        | ELetPair of (variable * variable * t * t)
+        | EFst of t
+        | ESnd of t
 end
