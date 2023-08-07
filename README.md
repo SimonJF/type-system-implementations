@@ -16,6 +16,8 @@ In the meantime though, here are the ones I've implemented:
       than at the end.
   * `bidir`: basic bidirectional typechecker
   * `hindley_milner`: Hindley-Milner type inference
+  * `cocontextual`: Co-contextual typing (type environments are an *output*
+      rather than an input)
 
 The REPL and Parser code is parameterised over the particular language
 implementation. To implement a new typechecker, program against the interface in

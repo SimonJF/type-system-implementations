@@ -1,0 +1,3 @@
+(library
+ (name cocontextual)
+ (libraries unionFind common))
