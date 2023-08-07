@@ -18,6 +18,7 @@ In the meantime though, here are the ones I've implemented:
   * `hindley_milner`: Hindley-Milner type inference
   * `cocontextual`: Co-contextual typing (type environments are an *output*
       rather than an input)
+  * `cocontextual_linear`: A linear type system implemented simply by abstracting out and tweaking some parameters to the cocontextual type system
 
 The REPL and Parser code is parameterised over the particular language
 implementation. To implement a new typechecker, program against the interface in
