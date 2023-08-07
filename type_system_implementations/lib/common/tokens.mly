@@ -28,6 +28,8 @@
 %token PLUS MINUS
 %token STAR DIV
 %token COLON
+%token COMMA
+%token FST SND
 
 /* Precedence */
 %left AND OR

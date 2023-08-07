@@ -2,4 +2,4 @@
  (public_name type_system_implementations)
  (name main)
  (flags (:standard -w -7-17-32-33-27-26-34-37-39))
- (libraries unionFind common stlc stlc_noann stlc_noann_onthefly bidir))
+ (libraries unionFind common stlc stlc_noann stlc_noann_onthefly bidir hindley_milner))

@@ -1,0 +1,3 @@
+(library
+ (name hindley_milner)
+ (libraries unionFind common))

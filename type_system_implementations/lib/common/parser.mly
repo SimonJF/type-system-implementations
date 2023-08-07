@@ -16,6 +16,7 @@
 
 ty:
   | atomic_ty ARROW ty { Language.Type_constructors.mk_fun $1 $3 }
+  | atomic_ty STAR ty { Language.Type_constructors.mk_pair $1 $3 }
   | atomic_ty { $1 }
 
 /* Atomic types are those that never need extra parentheses */
@@ -34,8 +35,12 @@ expr :
       { Expr_constructors.mk_fun $2 (Some $4) $6 }
   | LET ID EQ expr IN expr
       { Expr_constructors.mk_let $2 $4 $6 }
+  | LET LPAREN ID COMMA ID RPAREN EQ expr IN expr
+      { Expr_constructors.mk_letpair $3 $5 $8 $10 }
   | IF expr THEN expr ELSE expr
       { Expr_constructors.mk_if $2 $4 $6 }
+  | FST expr { Expr_constructors.mk_fst $2 }
+  | SND expr { Expr_constructors.mk_snd $2 }
   | fact basic_expr { Expr_constructors.mk_app $1 $2 }
   | basic_expr { $1 }
 
@@ -57,6 +62,7 @@ basic_expr :
 
 fact :
   | LPAREN expr COLON ty RPAREN { Expr_constructors.mk_ann $2 $4 }
+  | LPAREN expr COMMA expr RPAREN { Expr_constructors.mk_pair $2 $4 }
   | LPAREN expr RPAREN { $2 }
   | ID { try find table $1 with Not_found -> Expr_constructors.mk_variable ($1) }
   | STRINGV { Expr_constructors.mk_constant (Constant.CString $1) }

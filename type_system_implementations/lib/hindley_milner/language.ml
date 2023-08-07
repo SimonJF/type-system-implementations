@@ -1,5 +1,4 @@
-(* stlc_noann_onthefly: Same as stlc_noann, but performs unification on-the-fly
-   rather than waiting until the end. *)
+(* Hindley-Milner: Implementation of Algorithm J for Hindley-Milner type inference *)
 open Ast
 open Common
 open Language_sig
@@ -29,8 +28,80 @@ end
 
 module Typecheck = struct
     module StringMap = Map.Make(String)
-    type env = Type.t StringMap.t
+    module StringSet = Set.Make(String)
     exception Occurs_check
+
+    let rec ftvs =
+        let open Type in
+        function
+            | TVar tv -> StringSet.singleton (TyVar.var tv)
+            | TFun (t1, t2) ->
+                StringSet.union (ftvs t1) (ftvs t2)
+            | TPair (t1, t2) ->
+                StringSet.union (ftvs t1) (ftvs t2)
+            | _ -> StringSet.empty
+
+    let ftvs_mono = ftvs
+
+    let ftvs_poly (quants, mono) =
+        let mono_vars = ftvs mono in
+        StringSet.diff mono_vars quants
+
+    (* In order to avoid unnecessary computation in generalisation,
+       record FTVs along with the environment itself *)
+    module Env = struct
+        (* Type environments actually map variables to polytypes, even though
+           typechecking only ever returns a monotype *)
+        type t = StringSet.t * (Type.polytype StringMap.t)
+
+        let empty = (StringSet.empty, StringMap.empty)
+
+        let ftvs = fst
+
+        let bind_poly k (quants, ty) (env_ftvs, env) : t =
+            let ty_ftvs = StringSet.diff (ftvs_mono ty) (StringSet.of_list quants) in
+            (StringSet.union env_ftvs ty_ftvs,
+             StringMap.add k (quants, ty) env)
+        
+        let bind (k: Expr.variable) (ty: Type.monotype) : t -> t =
+            bind_poly k ([], ty)
+
+        let find k (_, env) =
+            match StringMap.find_opt k env with
+                | Some ty -> ty
+                | None -> raise (Errors.type_error ("Unbound variable " ^ k))
+    end
+    type env = Env.t
+
+    (* HM instantiation: substitute fresh TVs for all quantifiers *)
+    let instantiate (poly : Type.polytype) : Type.monotype =
+        let open Type in
+        let (quants, mono) = poly in
+        (* For each quantifier, create a fresh type variable *)
+        let subst_map =
+            List.map (fun q -> (q, TyVar.fresh ())) quants
+        in
+        (* Substitute the quantified TV for the fresh TV *)
+        let rec go = function
+            | TVar tv ->
+                begin
+                    match List.assoc_opt (TyVar.var tv) subst_map with
+                        | Some inst -> TVar inst
+                        | None -> TVar tv
+                end
+            | TFun (t1, t2) -> TFun (go t1, go t2)
+            | TPair (t1, t2) -> TPair (go t1, go t2)
+            | t -> t
+        in
+        go mono
+
+    (* HM generalisation: Generate type scheme for monotype, quantifying all
+       FTVs in the type that do not already occur in the environment. *)
+    let generalise env (monotype: Type.monotype) : Type.polytype =
+        (* Calculate FTVs in type *)
+        let type_ftvs = StringSet.diff (ftvs monotype) (Env.ftvs env) in
+        (* Host to quantifiers *)
+        (List.map Type.Quantifier.make (StringSet.elements type_ftvs)), monotype
 
     (* Checks whether type variable tv occurs in type t *)
     let occurs_check tv ty =
@@ -40,7 +111,8 @@ module Typecheck = struct
                 | TVar tv' ->
                     if tv = tv' then
                         raise Occurs_check
-                | TFun (t1, t2) -> go t1; go t2
+                | TFun  (t1, t2)
+                | TPair (t1, t2) -> go t1; go t2
                 | _ -> ()
         in
         try go ty with
@@ -52,11 +124,20 @@ module Typecheck = struct
                 in
                 raise (Errors.type_error err)
 
+    let rec is_value =
+        let open Expr in
+        function
+            | EPair (e1, e2) -> is_value e1 && is_value e2
+            | EAnn (e, _) -> is_value e
+            | EVar _ | EConst _ | EFun _ -> true
+            | _ -> false
+
     let rec unify t1 t2 =
         let open Type in
         match t1, t2 with
              | t1, t2 when t1 = t2 -> ()
-             | TFun (ta1, ta2), TFun (tb1, tb2) ->
+             | TFun (ta1, ta2), TFun (tb1, tb2)
+             | TPair (ta1, ta2), TPair (tb1, tb2) ->
                 unify ta1 tb1; unify ta2 tb2
              | TVar tv, t
              | t, TVar tv ->
@@ -76,7 +157,7 @@ module Typecheck = struct
                 raise (Errors.type_error err)
 
     (* Typechecking: constructs a type and constraint set *)
-    let rec tc env =
+    let rec tc (env: Env.t) =
         let open Expr in
         let open Type in
         let tc_const = function
@@ -110,20 +191,20 @@ module Typecheck = struct
                     TInt
         in
         function
-            | EVar v -> StringMap.find v env
+            | EVar v -> instantiate (Env.find v env)
             | EFun (bnd, ty_opt, body) ->
                 (* If we have a type annotation, use that --
                    otherwise create fresh type variable *)
                 let arg_ty =
                     match ty_opt with
                         | Some ann -> ann
-                        | None -> TVar (TyVar.fresh ())
+                        | None -> Type.fresh_var ()
                 in
-                let env' = StringMap.add bnd arg_ty env in
+                let env' = Env.bind bnd arg_ty env in
                 let body_ty = tc env' body in
                 TFun (arg_ty, body_ty)
             | EApp (e1, e2) ->
-                let ftv = TVar (TyVar.fresh ()) in
+                let ftv = Type.fresh_var () in
                 let ty1 = tc env e1 in
                 let ty2 = tc env e2 in
                 unify ty1 (TFun (ty2, ftv));
@@ -131,10 +212,37 @@ module Typecheck = struct
             | EBinOp (op, e1, e2) -> tc_binop op e1 e2
             | EConst c -> tc_const c
             | ELet (bnd, e1, e2) ->
+                (* Check whether we can generalise e1 (i.e., is it a syntactic value?).
+                   This is due to the value restriction. *)
                 let ty1 = tc env e1 in
-                let env' = StringMap.add bnd ty1 env in
+                let env' =
+                    if is_value e1 then
+                        (* Generalise *)
+                        Env.bind_poly bnd (generalise env ty1) env
+                    else
+                        Env.bind bnd ty1 env
+                in
                 let ty2 = tc env' e2 in
                 ty2
+            | ELetPair (x, y, e1, e2) ->
+                let ty1 = tc env e1 in
+                let var1 = Type.fresh_var () in
+                let var2 = Type.fresh_var () in
+                unify (TPair (var1, var2)) ty1;
+                let env = Env.bind x var1 env in
+                let env = Env.bind y var2 env in
+                let ty2 = tc env e2 in
+                ty2
+            | EPair (e1, e2) ->
+                let ty1 = tc env e1 in
+                let ty2 = tc env e2 in
+                TPair (ty1, ty2)
+            | EFst e ->
+                let ty = tc env e in
+                TPair (ty, Type.fresh_var ())
+            | ESnd e ->
+                let ty = tc env e in
+                TPair (Type.fresh_var (), ty)
             | EAnn (e, ann) ->
                 let ty = tc env e in
                 unify ty ann;
@@ -158,11 +266,11 @@ module Typecheck = struct
                         | Resolved ty -> ty
                 end
             | TFun (t1, t2) -> TFun (resolve_ty t1, resolve_ty t2)
+            | TPair (t1, t2) -> TPair (resolve_ty t1, resolve_ty t2)
             | ty -> ty
 
     let typecheck expr =
-        let ty = tc StringMap.empty expr in
-        Format.printf "Unsolved type: %a\n" Type.pp ty;
+        let ty = tc Env.empty expr in
         resolve_ty ty
 end
 
@@ -177,7 +285,7 @@ module Language : LANGUAGE = struct
         let mk_string = TString
         let mk_unit = TUnit
         let mk_fun t1 t2 = TFun (t1, t2)
-        let mk_pair _ _ = raise (Errors.unsupported "pair")
+        let mk_pair t1 t2 = TPair (t1, t2)
     end
 
     module Expr_constructors = struct
@@ -190,10 +298,10 @@ module Language : LANGUAGE = struct
         let mk_app e1 e2 = EApp (e1, e2)
         let mk_ann e t = EAnn (e, t)
         let mk_if cond t e = EIf (cond, t, e)
-        let mk_fst _ = raise (Errors.unsupported "fst")
-        let mk_snd _ = raise (Errors.unsupported "snd")
-        let mk_letpair _ _ _ _ = raise (Errors.unsupported "letpair")
-        let mk_pair _ _ = raise (Errors.unsupported "pair")
+        let mk_letpair x y e1 e2 = ELetPair (x, y, e1, e2)
+        let mk_pair e1 e2 = EPair (e1, e2)
+        let mk_fst e = EFst e
+        let mk_snd e = ESnd e
     end
 
     let typecheck = Typecheck.typecheck

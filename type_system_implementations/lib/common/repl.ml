@@ -16,12 +16,16 @@ module Make(Language: LANGUAGE) = struct
             let open Errors in
             try
                 let ty = pipeline str in
-                Format.printf "Solved type: %a\n" Type.pp ty
+                Format.printf "Type: %a\n" Type.pp ty
             with
                 | Parse_error err ->
                     Format.printf "[Parse error] %s\n" err
                 | Type_error err ->
                     Format.printf "[Type error] %s\n" err
+                | Unsupported feat ->
+                    Format.printf 
+                        "[Unsupported] Feature %s is unsupported in language %s\n"
+                        feat prompt
                 | exn -> Format.printf "[Error] %s\n" (Printexc.to_string exn)
         in
         let () = Format.print_flush () in

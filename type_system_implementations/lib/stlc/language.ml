@@ -122,6 +122,7 @@ module Language : LANGUAGE = struct
         let mk_string = TString
         let mk_unit = TUnit
         let mk_fun t1 t2 = TFun (t1, t2)
+        let mk_pair _ _ = raise (Errors.unsupported "pair")
     end
 
     module Expr_constructors = struct
@@ -138,6 +139,10 @@ module Language : LANGUAGE = struct
         let mk_app e1 e2 = EApp (e1, e2)
         let mk_ann e t = EAnn (e, t)
         let mk_if cond t e = EIf (cond, t, e)
+        let mk_fst _ = raise (Errors.unsupported "fst")
+        let mk_snd _ = raise (Errors.unsupported "snd")
+        let mk_letpair _ _ _ _ = raise (Errors.unsupported "letpair")
+        let mk_pair _ _ = raise (Errors.unsupported "pair")
     end
 
     let typecheck = Typecheck.typecheck

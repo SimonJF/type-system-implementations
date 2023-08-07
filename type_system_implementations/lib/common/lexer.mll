@@ -29,6 +29,7 @@ rule token = parse
   | ')'
       { RPAREN }
   | '.' { DOT }
+  | ',' { COMMA }
   | '*'      { STAR }
   | '/'      { DIV }
   | '+'      { PLUS }
@@ -70,6 +71,10 @@ rule token = parse
       { THEN }
   | "else"
       { ELSE }
+  | "fst"
+      { FST }
+  | "snd"
+      { SND }
   | "String"
       { STRING }
   | "Int"

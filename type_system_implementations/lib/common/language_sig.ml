@@ -24,6 +24,7 @@ module type LANGUAGE = sig
         val mk_string : Type.t
         val mk_unit : Type.t
         val mk_fun : Type.t -> Type.t -> Type.t
+        val mk_pair : Type.t -> Type.t -> Type.t
     end
 
     module Expr_constructors : sig
@@ -35,6 +36,10 @@ module type LANGUAGE = sig
         val mk_app : Expr.t -> Expr.t -> Expr.t
         val mk_ann : Expr.t -> Type.t -> Expr.t
         val mk_if : Expr.t -> Expr.t -> Expr.t -> Expr.t
+        val mk_pair : Expr.t -> Expr.t -> Expr.t
+        val mk_fst : Expr.t -> Expr.t
+        val mk_snd : Expr.t -> Expr.t
+        val mk_letpair : variable -> variable -> Expr.t -> Expr.t -> Expr.t
     end
 
     val typecheck : Expr.t -> Type.t
