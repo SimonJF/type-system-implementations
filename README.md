@@ -14,6 +14,8 @@ In the meantime though, here are the ones I've implemented:
       lambdas. Solves constraints at the end.
   * `stlc_noann_onthefly`: as above, but performs unification on the go rather
       than at the end.
+  * `bidir`: basic bidirectional typechecker
+  * `hindley_milner`: Hindley-Milner type inference
 
 The REPL and Parser code is parameterised over the particular language
 implementation. To implement a new typechecker, program against the interface in
