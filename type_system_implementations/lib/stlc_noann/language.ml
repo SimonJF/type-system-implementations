@@ -39,6 +39,7 @@ module Solution = struct
                     | None -> TVar tv
               end
         | TFun (t1, t2) -> TFun (apply sol t1, apply sol t2)
+        | TPair (t1, t2) -> TPair (apply sol t1, apply sol t2)
         | t -> t
 
     let pp ppf sol =
@@ -100,7 +101,8 @@ module Solver = struct
             let open Type in
             match t1, t2 with
                  | t1, t2 when t1 = t2 -> ()
-                 | TFun (ta1, ta2), TFun (tb1, tb2) ->
+                 | TFun (ta1, ta2), TFun (tb1, tb2)
+                 | TPair (ta1, ta2), TPair (tb1, tb2) ->
                     unify ta1 tb1; unify ta2 tb2
                  | TVar tv, t
                  | t, TVar tv ->
