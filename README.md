@@ -19,6 +19,8 @@ In the meantime though, here are the ones I've implemented:
   * `cocontextual`: Co-contextual typing (type environments are an *output*
       rather than an input)
   * `cocontextual_linear`: A linear type system implemented simply by abstracting out and tweaking some parameters to the cocontextual type system
+  * `linear_subtractive`: A subtractive linear type system where a variable is removed from its context as soon as it is used. (Leftover typing)
+  * `linear_additive`: An additive linear type system where a variable is marked upon use; checks are made when combining usage maps and at binding sites
 
 The REPL and Parser code is parameterised over the particular language
 implementation. To implement a new typechecker, program against the interface in

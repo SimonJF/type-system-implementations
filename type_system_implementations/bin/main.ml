@@ -8,7 +8,8 @@ let languages = [
     ("hindley_milner", (module Hindley_milner.Language.Language : LANGUAGE));
     ("cocontextual", (module Cocontextual.Language.Unrestricted : LANGUAGE));
     ("cocontextual_linear", (module Cocontextual.Language.Linear : LANGUAGE));
-    ("linear_subtractive", (module Linear_subtractive.Language.Language : LANGUAGE))
+    ("linear_subtractive", (module Linear_subtractive.Language.Language : LANGUAGE));
+    ("linear_additive", (module Linear_additive.Language.Language : LANGUAGE))
 ]
 
 let () =
